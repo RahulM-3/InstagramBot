@@ -7,15 +7,21 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 
+from google_gemini import askgemini
 
 class instagrambot:
     def __init__(self):
+        # selenium setup
         options = Options()
         options.add_experimental_option('detach', True)
         options.add_argument(os.getenv("chromepath"))
         self.driver = webdriver.Chrome(options)
         self.driver.get("https://www.instagram.com/direct/t/7516610245113642/")
+
+        self.cmdlookup = 1
+        
         if("Login" in self.driver.title):
+            print("\nLogging-in")
             while(True):
                 try:
                     self.driver.find_element("xpath", '//*[@id="loginForm"]/div/div[1]/div/label/input').send_keys(os.getenv("botusername"))
@@ -30,14 +36,74 @@ class instagrambot:
                     break
                 except:
                     pass
+            print("Logged-in Successfully")
         
-    def getcommand(self) -> None:
-        sleep(1)
-        for i in range(1, 10):
-            print("Text in", i)
-            print(self.driver.find_element("xpath", f'/html/body/div[2]/div/div/div[2]/div/div/div[1]/div[1]/div[2]/section/div/div/div/div[1]/div/div[2]/div/div/div[1]/div/div/div/div[2]/div/div/div[1]/div/div/div/div/div/div/div[3]/div/div[{i}]').text)
-            print()
+        print("\nActivating Bot")
+        sleep(10)
+        activatemsg = "Cancer Bot Online, Ready to receive commands!"
+        self.driver.find_element("xpath", '/html/body/div[2]/div/div/div[2]/div/div/div[1]/div[1]/div[2]/section/div/div/div/div[1]/div/div[2]/div/div/div/div/div/div/div[2]/div/div/div[2]/div/div/div[2]/div/div[1]/p').send_keys(activatemsg)
+        self.driver.find_element("xpath", '/html/body/div[2]/div/div/div[2]/div/div/div[1]/div[1]/div[2]/section/div/div/div/div[1]/div/div[2]/div/div/div[1]/div/div/div/div[2]/div/div/div[2]/div/div/div[3]').click()
+        sleep(0.5)
+        while(True):
+            msg = self.getmessage()
+            if(msg[0] == "You sent" and msg[1] == activatemsg):
+                print(msg)
+                break
+        print("Bot Activated Successfully")
+    
+    def getlastmessage(self):
+        msg = self.driver.find_element("xpath", f'/html/body/div[2]/div/div/div[2]/div/div/div[1]/div[1]/div[2]/section/div/div/div/div[1]/div/div[2]/div/div/div/div/div/div/div[2]/div/div/div[1]/div/div/div/div/div/div/div[3]/div/div[{self.cmdlookup}]').text
+        msg = list(msg.split("\n"))
+        if(len(msg) == 1):
+            return (None, None, -1)
+        user = msg[0]
+        message = msg[1]
+        if(len(msg) == 4):
+            user = msg[1]
+            message = msg[2]
+        return (user, message, self.cmdlookup-1)
+
+    def getmessage(self, lookup=0) -> tuple:
+        i = lookup
+        if(lookup == 0):
+           i = self.cmdlookup
+        try:
+            msg = self.driver.find_element("xpath", f'/html/body/div[2]/div/div/div[2]/div/div/div[1]/div[1]/div[2]/section/div/div/div/div[1]/div/div[2]/div/div/div/div/div/div/div[2]/div/div/div[1]/div/div/div/div/div/div/div[3]/div/div[{i}]').text
+            msg = list(msg.split("\n"))
+            if(lookup == 0):
+                self.cmdlookup += 1
+            if(len(msg) == 1):
+                return (None, msg, -1)
+            user = msg[0]
+            message = msg[1]
+            if(len(msg) == 4):
+                user = msg[1]
+                message = msg[2]
+            return (user, message, i)
         
+        except Exception as err:
+            return (None, None, -11)
+    
+    def replyto(self, msgid, msg) -> None:
+        self.driver.find_element("xpath", f'/html/body/div[2]/div/div/div[2]/div/div/div[1]/div[1]/div[2]/section/div/div/div/div[1]/div/div[2]/div/div/div/div/div/div/div[2]/div/div/div[1]/div/div/div/div/div/div/div[3]/div/div[{msgid}]').click()
+        self.driver.find_element("xpath", f'/html/body/div[2]/div/div/div[2]/div/div/div[1]/div[1]/div[2]/section/div/div/div/div[1]/div/div[2]/div/div/div[1]/div/div/div/div[2]/div/div/div[1]/div/div/div/div/div/div/div[3]/div/div[{msgid}]/div/div/div/div[1]/div/div/div[2]/div[2]/div/div/div/div[2]').click()
+
+        self.driver.find_element("xpath", '/html/body/div[2]/div/div/div[2]/div/div/div[1]/div[1]/div[2]/section/div/div/div/div[1]/div/div[2]/div/div/div/div/div/div/div[2]/div/div/div[2]/div/div/div[2]/div/div[1]/p').send_keys(msg)
+        self.driver.find_element("xpath", '/html/body/div[2]/div/div/div[2]/div/div/div[1]/div[1]/div[2]/section/div/div/div/div[1]/div/div[2]/div/div/div[1]/div/div/div/div[2]/div/div/div[2]/div/div/div[3]').click()
+        
+    def askmecmd(self, prompt, msgid):
+        print(prompt, msgid)
+        response = askgemini(prompt)
+        print(response)
+        self.replyto(msgid, response)
+
+
 if(__name__ == "__main__"):
     bot = instagrambot()
-    bot.getcommand()
+
+    while(True):
+        msg = bot.getmessage(bot.cmdlookup)
+        print(msg, msg[1])
+        if(msg[0] and "/askme" in msg[1]):
+            bot.askmecmd(msg[1].replace("/askme", ""), msg[2])
+        sleep(1)
